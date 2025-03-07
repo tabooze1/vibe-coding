@@ -14,58 +14,102 @@ export interface PoliceIncident {
 }
 
 export function parseCSVData(csvText: string): PoliceIncident[] {
-  // Split by newlines but preserve quoted content
-  const lines = csvText.split('\n');
-  console.log('Total lines:', lines.length);
+  // First, let's properly handle the CSV by preserving newlines in quoted fields
+  const rows: string[] = [];
+  let currentRow = '';
+  let insideQuotes = false;
   
-  const incidents = lines.slice(1).map(line => {
-    if (!line.trim()) {
+  for (let i = 0; i < csvText.length; i++) {
+    const char = csvText[i];
+    const nextChar = csvText[i + 1];
+    
+    if (char === '"') {
+      insideQuotes = !insideQuotes;
+    }
+    
+    if (char === '\n' && !insideQuotes) {
+      rows.push(currentRow);
+      currentRow = '';
+      continue;
+    }
+    
+    currentRow += char;
+  }
+  if (currentRow) {
+    rows.push(currentRow);
+  }
+
+  console.log('Total rows:', rows.length);
+  
+  // Skip header row
+  const incidents = rows.slice(1).map(row => {
+    if (!row.trim()) return null;
+
+    // Split the row into fields, preserving quoted content
+    const fields: string[] = [];
+    let field = '';
+    insideQuotes = false;
+    
+    for (let i = 0; i < row.length; i++) {
+      const char = row[i];
+      
+      if (char === '"') {
+        insideQuotes = !insideQuotes;
+        continue;
+      }
+      
+      if (char === ',' && !insideQuotes) {
+        fields.push(field.trim());
+        field = '';
+        continue;
+      }
+      
+      field += char;
+    }
+    fields.push(field.trim());
+
+    if (fields.length < 9) {
+      console.log('Invalid row format:', row);
       return null;
     }
 
-    // Split the line by commas, but preserve commas inside quotes
-    const values = line.match(/(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^,]*))/g)?.map(value => {
-      // Remove leading comma and quotes, and handle double quotes
-      return value.replace(/^,?"?|"$/g, '').replace(/""/g, '"');
-    }) || [];
-
-    if (values.length < 9) {
-      console.log('Invalid line format:', line);
-      return null;
+    // Parse the location field
+    const locationField = fields[8].replace(/^"|"$/g, '');
+    const parts = locationField.split('\n').map(part => part.trim());
+    
+    // Look for coordinates in each part
+    let coordinates: [number, number] | null = null;
+    for (const part of parts) {
+      const match = part.match(/\(([-\d.]+),\s*([-\d.]+)\)/);
+      if (match) {
+        coordinates = [parseFloat(match[1]), parseFloat(match[2])];
+        break;
+      }
     }
 
-    // The last value should contain the location information
-    const locationInfo = values[8];
-    const coordinatesMatch = locationInfo.match(/\(([-\d.]+),\s*([-\d.]+)\)/);
-
-    if (!coordinatesMatch) {
-      console.log('No coordinates found in:', locationInfo);
+    if (!coordinates) {
+      console.log('No coordinates found in location:', locationField);
       return null;
     }
-
-    const coordinates: [number, number] = [
-      parseFloat(coordinatesMatch[1]),
-      parseFloat(coordinatesMatch[2])
-    ];
 
     if (isNaN(coordinates[0]) || isNaN(coordinates[1])) {
-      console.log('Invalid coordinates:', coordinatesMatch[1], coordinatesMatch[2]);
+      console.log('Invalid coordinates:', coordinates);
       return null;
     }
 
-    console.log('Found coordinates:', coordinates[0], coordinates[1]);
+    console.log('Found incident:', fields[0], 'at', coordinates);
 
     return {
-      caseNumber: values[0],
-      date: values[1],
-      outcome: values[2],
-      subjectWeapon: values[3],
-      officers: values[4],
-      grandJuryDisposition: values[5],
-      attorneyGeneralUrl: values[6],
-      summaryUrl: values[7],
+      caseNumber: fields[0],
+      date: fields[1],
+      outcome: fields[2],
+      subjectWeapon: fields[3],
+      officers: fields[4],
+      grandJuryDisposition: fields[5],
+      attorneyGeneralUrl: fields[6],
+      summaryUrl: fields[7],
       location: {
-        address: locationInfo.split('\n')[0]?.trim() || '',
+        address: parts[0] || '',
         coordinates
       }
     };
