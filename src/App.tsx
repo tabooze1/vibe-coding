@@ -8,7 +8,7 @@ function App() {
 
   useEffect(() => {
     console.log('Starting to fetch CSV...');
-    fetch('/Dallas_Police_Officer-Involved_Shootings.csv')
+    fetch('/vibe-coding/Dallas_Police_Officer-Involved_Shootings.csv')
       .then(response => {
         console.log('CSV Response status:', response.status);
         if (!response.ok) {
