@@ -14,92 +14,99 @@ export interface PoliceIncident {
 }
 
 export function parseCSVData(csvText: string): PoliceIncident[] {
-  // Split by newlines but preserve quoted content
-  const lines = csvText.split('\n');
-  console.log('Total lines:', lines.length);
+  // First, normalize line endings and split into lines
+  const normalizedText = csvText.replace(/\r\n/g, '\n');
+  const allLines = normalizedText.split('\n');
   
-  // Skip header row
+  // Combine lines that are part of the same record
+  const lines: string[] = [];
+  let currentLine = '';
+  
+  for (const line of allLines) {
+    if (line.includes('(') && line.includes(')')) {
+      // This line contains coordinates, so it's the end of a record
+      lines.push(currentLine + line);
+      currentLine = '';
+    } else if (line.trim() !== '') {
+      // This line is part of a record
+      currentLine += line + ' ';
+    }
+  }
+
+  console.log('Total records:', lines.length);
+
+  // Skip header and process each line
   const incidents = lines.slice(1).map((line, index) => {
-    if (!line.trim()) {
-      console.log(`Line ${index + 1}: Empty line`);
-      return null;
-    }
+    try {
+      // Extract coordinates
+      const coordMatch = line.match(/\(([-\d.]+),\s*([-\d.]+)\)/);
+      if (!coordMatch) {
+        console.log(`Line ${index + 1}: No coordinates found`);
+        return null;
+      }
 
-    // Extract coordinates from the end of the line
-    const coordinatesMatch = line.match(/\(([-\d.]+),\s*([-\d.]+)\)/);
-    if (!coordinatesMatch) {
-      console.log(`Line ${index + 1}: No coordinates found in line:`, line);
-      return null;
-    }
+      const coordinates: [number, number] = [
+        parseFloat(coordMatch[1]),
+        parseFloat(coordMatch[2])
+      ];
 
-    const coordinates: [number, number] = [
-      parseFloat(coordinatesMatch[1]),
-      parseFloat(coordinatesMatch[2])
-    ];
+      // Remove the coordinates part and split the rest by commas
+      const mainPart = line.substring(0, line.indexOf('('));
+      const parts: string[] = [];
+      let field = '';
+      let inQuotes = false;
 
-    // Split by commas, handling quoted fields
-    const fields: string[] = [];
-    let currentField = '';
-    let insideQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      
-      // Stop when we reach the coordinates
-      if (char === '(' && !insideQuotes && line.substring(i).includes(')')) {
-        if (currentField.trim()) {
-          fields.push(currentField.trim());
+      for (let i = 0; i < mainPart.length; i++) {
+        const char = mainPart[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+          field += char;
+        } else if (char === ',' && !inQuotes) {
+          parts.push(field.trim());
+          field = '';
+        } else {
+          field += char;
         }
-        break;
       }
-      
-      if (char === '"') {
-        insideQuotes = !insideQuotes;
-      } else if (char === ',' && !insideQuotes) {
-        fields.push(currentField.trim());
-        currentField = '';
-      } else {
-        currentField += char;
+      if (field) {
+        parts.push(field.trim());
       }
-    }
 
-    // Clean up the fields
-    const cleanFields = fields.map(field => field.replace(/^"|"$/g, '').trim());
+      // Clean up the fields
+      const fields = parts.map(f => f.replace(/^"?|"?$/g, '').trim());
 
-    if (cleanFields.length < 8) {
-      console.log(`Line ${index + 1}: Not enough fields:`, cleanFields);
+      if (fields.length < 8) {
+        console.log(`Line ${index + 1}: Not enough fields`, fields);
+        return null;
+      }
+
+      // Create the incident object
+      const incident: PoliceIncident = {
+        caseNumber: fields[0],
+        date: fields[1],
+        outcome: fields[2],
+        subjectWeapon: fields[3],
+        officers: fields[4],
+        grandJuryDisposition: fields[5],
+        attorneyGeneralUrl: fields[6],
+        summaryUrl: fields[7],
+        location: {
+          address: fields[7].split('http')[0].trim(),
+          coordinates
+        }
+      };
+
+      console.log(`Successfully parsed incident: ${incident.caseNumber}`);
+      return incident;
+    } catch (error) {
+      console.error(`Error parsing line ${index + 1}:`, error);
       return null;
     }
-
-    // Get the address from the location field
-    const address = cleanFields[7].split('\n')[0].trim();
-
-    const incident = {
-      caseNumber: cleanFields[0],
-      date: cleanFields[1],
-      outcome: cleanFields[2],
-      subjectWeapon: cleanFields[3],
-      officers: cleanFields[4],
-      grandJuryDisposition: cleanFields[5],
-      attorneyGeneralUrl: cleanFields[6],
-      summaryUrl: cleanFields[7],
-      location: {
-        address,
-        coordinates
-      }
-    };
-
-    console.log(`Line ${index + 1}: Successfully parsed incident:`, incident.caseNumber, 'at', coordinates);
-    return incident;
   }).filter((incident): incident is PoliceIncident => {
     if (!incident) return false;
-    const valid = !isNaN(incident.location.coordinates[0]) && 
+    return !isNaN(incident.location.coordinates[0]) && 
            !isNaN(incident.location.coordinates[1]) &&
            incident.caseNumber !== '';
-    if (!valid) {
-      console.log('Invalid incident:', incident);
-    }
-    return valid;
   });
 
   console.log('Valid incidents:', incidents.length);
