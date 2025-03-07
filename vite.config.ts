@@ -8,4 +8,13 @@ export default defineConfig({
     exclude: ['lucide-react'],
   },
   base: '/vibe-coding/',
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
+  }
 });
