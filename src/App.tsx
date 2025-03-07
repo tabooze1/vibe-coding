@@ -8,7 +8,9 @@ function App() {
 
   useEffect(() => {
     console.log('Starting to fetch CSV...');
-    fetch('/vibe-coding/Dallas_Police_Officer-Involved_Shootings.csv')
+    // Use window.location.origin to get the base URL
+    const baseUrl = import.meta.env.DEV ? '' : '/vibe-coding';
+    fetch(`${baseUrl}/Dallas_Police_Officer-Involved_Shootings.csv`)
       .then(response => {
         console.log('CSV Response status:', response.status);
         if (!response.ok) {
