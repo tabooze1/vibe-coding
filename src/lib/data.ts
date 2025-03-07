@@ -70,4 +70,4 @@ export function parseCSVData(csvText: string): PoliceIncident[] {
     console.log('Sample incident:', incidents[0]);
   }
   return incidents;
-} 
+}
